@@ -19,8 +19,8 @@ struct AccessEntry {
 };
 
 // Configuration
-const int MAX_RFID_CARDS = 50;     // Maximum number of RFID cards
-const int MAX_HISTORY_ENTRIES = 10000; // Maximum number of history entries
+const int MAX_RFID_CARDS = 20;     // Maximum number of RFID cards
+const int MAX_HISTORY_ENTRIES = 100; // Maximum number of history entries
 RfidCard rfidList[MAX_RFID_CARDS] = {
   {"code", "name"}
 };
@@ -39,6 +39,10 @@ IPAddress gateway(255, 255, 255, 255);
 IPAddress subnet(255, 255, 255, 255);
 IPAddress primaryDNS(1, 1, 1, 1); // Optional: primary DNS
 IPAddress secondaryDNS(8, 8, 8, 8);   // Optional: secondary DNS (Google DNS)
+
+// Authentication credentials
+const char* http_username = "login ";
+const char* http_password = "password"; // ZMIEŃ NA WŁASNE, SILNE HASŁO!
 
 // UDP configuration
 const char* udpAddress2 = "255.255.255.255";
@@ -61,6 +65,12 @@ bool relayActive = false;
 
 // Variable to track if IP was displayed
 bool ipDisplayed = false;
+
+// Check if client IP is in LAN (212.14.4.0/24)
+bool isClientInLAN(IPAddress clientIP) {
+  // LAN range: 255.255.255.255 - 255.255.255.255
+  return (clientIP[0] == 255 && clientIP[1] == 255 && clientIP[2] == 255);
+}
 
 void setup() {
   Serial.begin(9600);
@@ -205,6 +215,15 @@ String getCurrentTime() {
 void setupWebServer() {
   // Main page
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+    IPAddress clientIP = request->client()->remoteIP();
+    if (!isClientInLAN(clientIP)) {
+      Serial.println("Odmowa dostępu: " + clientIP.toString());
+      request->send(403, "text/plain", "Dostęp tylko dla ACI");
+      return;
+    }
+    if (!request->authenticate(http_username, http_password)) {
+      return request->requestAuthentication();
+    }
     String html = "<!DOCTYPE html><html><head>";
     html += "<meta charset='UTF-8'>";
     html += "<title>ESP32 RFID Management</title>";
@@ -259,6 +278,15 @@ void setupWebServer() {
 
   // Handle adding new RFID card
   server.on("/add", HTTP_POST, [](AsyncWebServerRequest *request) {
+    IPAddress clientIP = request->client()->remoteIP();
+    if (!isClientInLAN(clientIP)) {
+      Serial.println("Odmowa dostępu - IP spoza LAN: " + clientIP.toString());
+      request->send(403, "text/plain", "Dostęp tylko dla ACI");
+      return;
+    }
+    if (!request->authenticate(http_username, http_password)) {
+      return request->requestAuthentication();
+    }
     if (rfidListSize < MAX_RFID_CARDS && request->hasParam("cardId", true) && request->hasParam("owner", true)) {
       String cardId = request->getParam("cardId", true)->value();
       String owner = request->getParam("owner", true)->value();
@@ -275,6 +303,15 @@ void setupWebServer() {
 
   // Handle deleting RFID card
   server.on("/delete", HTTP_GET, [](AsyncWebServerRequest *request) {
+    IPAddress clientIP = request->client()->remoteIP();
+    if (!isClientInLAN(clientIP)) {
+      Serial.println("Odmowa dostępu - IP spoza LAN: " + clientIP.toString());
+      request->send(403, "text/plain", "Dostęp tylko dla ACI");
+      return;
+    }
+    if (!request->authenticate(http_username, http_password)) {
+      return request->requestAuthentication();
+    }
     if (request->hasParam("index")) {
       int index = request->getParam("index")->value().toInt();
       if (index >= 0 && index < rfidListSize) {
@@ -289,6 +326,15 @@ void setupWebServer() {
 
   // API endpoint for RFID list
   server.on("/api/rfid", HTTP_GET, [](AsyncWebServerRequest *request) {
+    IPAddress clientIP = request->client()->remoteIP();
+    if (!isClientInLAN(clientIP)) {
+      Serial.println("Odmowa dostępu - IP spoza LAN: " + clientIP.toString());
+      request->send(403, "text/plain", "Dostęp tylko dla ACI");
+      return;
+    }
+    if (!request->authenticate(http_username, http_password)) {
+      return request->requestAuthentication();
+    }
     DynamicJsonDocument doc(2048);
     JsonArray cards = doc.createNestedArray("cards");
     for (int i = 0; i < rfidListSize; i++) {
@@ -303,6 +349,15 @@ void setupWebServer() {
 
   // API endpoint for access history
   server.on("/api/history", HTTP_GET, [](AsyncWebServerRequest *request) {
+    IPAddress clientIP = request->client()->remoteIP();
+    if (!isClientInLAN(clientIP)) {
+      Serial.println("Odmowa dostępu - IP spoza LAN: " + clientIP.toString());
+      request->send(403, "text/plain", "Dostęp tylko dla ACI");
+      return;
+    }
+    if (!request->authenticate(http_username, http_password)) {
+      return request->requestAuthentication();
+    }
     DynamicJsonDocument doc(4096);
     JsonArray entries = doc.createNestedArray("entries");
     for (int i = 0; i < historySize; i++) {
